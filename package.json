@@ -1,0 +1,27 @@
+{
+  "name": "wazirx",
+  "version": "0.1.0",
+  "scripts": {
+    "create": "graph create wazir/dex --node https://mumbai-graph.matic.today",
+    "create:local": "graph create wazirx/dex --node http://127.0.0.1:8020",
+    "codegen": "graph codegen --output-dir src/types/",
+    "build": "graph build",
+    "deploy": "graph deploy --access-token c90876740d3d4648802b67ef6373e8cc --node https://api.thegraph.com/deploy/ --ipfs https://api.thegraph.com/ipfs/ sameepsi/wazirx",
+    "deploy:beta": "graph deploy balancer-labs/balancer-beta --ipfs https://api.thegraph.com/ipfs/ --node https://api.thegraph.com/deploy/",
+    "deploy:kovan": "graph deploy balancer-labs/balancer-kovan subgraph.kovan.yaml --debug --ipfs https://api.thegraph.com/ipfs/ --node https://api.thegraph.com/deploy/",
+    "deploy:ropsten": "graph deploy balancer-labs/balancer-ropsten subgraph.ropsten.yaml --debug --ipfs https://api.thegraph.com/ipfs/ --node https://api.thegraph.com/deploy/",
+    "deploy:local": "graph deploy wazirx/mumbai-balancer-subgraph subgraph.mumbai.yaml --debug --ipfs https://api.thegraph.com/ipfs/ --node https://mumbai-graph.matic.today"
+  },
+  "devDependencies": {
+    "@graphprotocol/graph-cli": "^0.18.0",
+    "@graphprotocol/graph-ts": "^0.18.1"
+  },
+  "dependencies": {
+    "babel-polyfill": "^6.26.0",
+    "babel-register": "^6.26.0",
+    "keytar": "^5.0.0",
+    "truffle": "^5.1.0",
+    "truffle-contract": "^4.0.5",
+    "truffle-hdwallet-provider": "^1.0.4"
+  }
+}
