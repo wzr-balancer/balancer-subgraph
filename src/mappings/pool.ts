@@ -16,9 +16,12 @@ import {
   createPoolShareEntity,
   createPoolTokenEntity,
   updatePoolLiquidity,
+  getCrpUnderlyingPool,
   saveTransaction,
-  ZERO_BD
+  ZERO_BD,
+  decrPoolCount
 } from './helpers'
+import { ConfigurableRightsPool, OwnershipTransferred } from '../types/Factory/ConfigurableRightsPool'
 
 /************************************
  ********** Pool Controls ***********
@@ -44,6 +47,19 @@ export function handleSetController(event: LOG_CALL): void {
   saveTransaction(event, 'setController')
 }
 
+export function handleSetCrpController(event: OwnershipTransferred): void {
+  // This event occurs on the CRP contract rather than the underlying pool so we must perform a lookup.
+  let crp = ConfigurableRightsPool.bind(event.address)
+  let pool = Pool.load(getCrpUnderlyingPool(crp))
+  pool.crpController = event.params.newOwner
+  pool.save()
+
+  // We overwrite event address so that ownership transfers can be linked to Pool entities for above reason.
+  event.address = Address.fromString(pool.id)
+  saveTransaction(event, 'setCrpController')
+}
+
+
 export function handleSetPublicSwap(event: LOG_CALL): void {
   let poolId = event.address.toHex()
   let pool = Pool.load(poolId)
@@ -59,6 +75,7 @@ export function handleFinalize(event: LOG_CALL): void {
   let pool = Pool.load(poolId)
   // let balance = BigDecimal.fromString('100')
   pool.finalized = true
+  pool.symbol = 'BPT'
   pool.publicSwap = true
   // pool.totalShares = balance
   pool.save()
@@ -116,7 +133,10 @@ export function handleRebind(event: LOG_CALL): void {
   poolToken.denormWeight = denormWeight
   poolToken.save()
 
-  if (balance.equals(ZERO_BD)) pool.active = false
+  if (balance.equals(ZERO_BD)) {
+    decrPoolCount(pool.active, pool.finalized, pool.crp)
+    pool.active = false
+  }
   pool.save()
 
   updatePoolLiquidity(poolId)
@@ -141,20 +161,20 @@ export function handleUnbind(event: LOG_CALL): void {
   pool.save()
   store.remove('PoolToken', poolTokenId)
 
+  updatePoolLiquidity(poolId)
   saveTransaction(event, 'unbind')
 }
 
-export function handleGulp(event: LOG_CALL): void {
-  let poolId = event.address.toHex()
-  
+export function handleGulp(call: GulpCall): void {
+  let poolId = call.to.toHexString()
   let pool = Pool.load(poolId)
 
-  let address = Address.fromString(event.params.data.toHexString().slice(-40))
+  let address = call.inputs.token.toHexString()
 
   let bpool = BPool.bind(Address.fromString(poolId))
-  let balanceCall = bpool.try_getBalance(Address.fromString(address.toHexString()))
+  let balanceCall = bpool.try_getBalance(Address.fromString(address))
 
-  let poolTokenId = poolId.concat('-').concat(address.toHexString())
+  let poolTokenId = poolId.concat('-').concat(address)
   let poolToken = PoolToken.load(poolTokenId)
 
   if (poolToken != null) {
@@ -204,7 +224,10 @@ export function handleExitPool(event: LOG_EXIT): void {
 
   let pool = Pool.load(poolId)
   pool.exitsCount += BigInt.fromI32(1)
-  if (newAmount.equals(ZERO_BD)) pool.active = false
+  if (newAmount.equals(ZERO_BD)) {
+    decrPoolCount(pool.active, pool.finalized, pool.crp)
+    pool.active = false
+  }
   pool.save()
 
   updatePoolLiquidity(poolId)
@@ -243,29 +266,57 @@ export function handleSwap(event: LOG_SWAP): void {
   }
 
   let pool = Pool.load(poolId)
-  let tokenPrice = TokenPrice.load(tokenOut)
+  let tokensList: Array<Bytes> = pool.tokensList
+  let tokenOutPriceValue = ZERO_BD
+  let tokenOutPrice = TokenPrice.load(tokenOut)
+
+  if (tokenOutPrice != null) {
+    tokenOutPriceValue = tokenOutPrice.price
+  } else {
+    for (let i: i32 = 0; i < tokensList.length; i++) {
+      let tokenPriceId = tokensList[i].toHexString()
+      if (!tokenOutPriceValue.gt(ZERO_BD) && tokenPriceId !== tokenOut) {
+        let tokenPrice = TokenPrice.load(tokenPriceId)
+        if (tokenPrice !== null && tokenPrice.price.gt(ZERO_BD)) {
+          let poolTokenId = poolId.concat('-').concat(tokenPriceId)
+          let poolToken = PoolToken.load(poolTokenId)
+          tokenOutPriceValue = tokenPrice.price
+            .times(poolToken.balance)
+            .div(poolToken.denormWeight)
+            .times(poolTokenOut.denormWeight)
+            .div(poolTokenOut.balance)
+        }
+      }
+    }
+  }
+
   let totalSwapVolume = pool.totalSwapVolume
   let totalSwapFee = pool.totalSwapFee
   let liquidity = pool.liquidity
   let swapValue = ZERO_BD
   let swapFeeValue = ZERO_BD
+  let factory = Balancer.load('1')
 
-  if (tokenPrice !== null) {
-    swapValue = tokenPrice.price.times(tokenAmountOut)
+  if (tokenOutPriceValue.gt(ZERO_BD)) {
+    swapValue = tokenOutPriceValue.times(tokenAmountOut)
     swapFeeValue = swapValue.times(pool.swapFee)
     totalSwapVolume = totalSwapVolume.plus(swapValue)
     totalSwapFee = totalSwapFee.plus(swapFeeValue)
 
-    let factory = Balancer.load('1')
+
     factory.totalSwapVolume = factory.totalSwapVolume.plus(swapValue)
     factory.totalSwapFee = factory.totalSwapFee.plus(swapFeeValue)
-    factory.save()
 
     pool.totalSwapVolume = totalSwapVolume
     pool.totalSwapFee = totalSwapFee
   }
+
   pool.swapsCount += BigInt.fromI32(1)
+  factory.txCount += BigInt.fromI32(1)
+  factory.save()
+
   if (newAmountIn.equals(ZERO_BD) || newAmountOut.equals(ZERO_BD)) {
+    decrPoolCount(pool.active, pool.finalized, pool.crp)
     pool.active = false
   }
   pool.save()

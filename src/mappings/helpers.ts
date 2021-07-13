@@ -17,20 +17,34 @@ import {
 } from '../types/schema'
 import { BTokenBytes } from '../types/templates/Pool/BTokenBytes'
 import { BToken } from '../types/templates/Pool/BToken'
+import { CRPFactory } from '../types/Factory/CRPFactory'
+import { ConfigurableRightsPool } from '../types/Factory/ConfigurableRightsPool'
 
 export let ZERO_BD = BigDecimal.fromString('0')
 
 let network = dataSource.network()
 
-export let WETH: string = (network == 'mainnet')
-  ? '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2'
-  : '0xd0a1e359811322d97991e03f863a0c30c2cf029c'
+// Config for mainnet
+let WETH = '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2'
+let USD = '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48'
+let DAI = '0x6b175474e89094c44da98b954eedeac495271d0f'
+let CRP_FACTORY = '0xed52D8E202401645eDAD1c0AA21e872498ce47D0'
 
-export let USD: string = (network == 'mainnet')
-  ? '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48' // USDC
-  : '0x1528f3fcc26d13f7079325fb78d9442607781c8c' // DAI
+if (network == 'kovan') {
+  WETH = '0xd0a1e359811322d97991e03f863a0c30c2cf029c'
+  USD = '0x2f375e94fc336cdec2dc0ccb5277fe59cbf1cae5'
+  DAI = '0x1528f3fcc26d13f7079325fb78d9442607781c8c'
+  CRP_FACTORY = '0x53265f0e014995363AE54DAd7059c018BaDbcD74'
+}
 
-export function hexToDecimal(hexString: String, decimals: i32): BigDecimal {
+if (network == 'rinkeby') {
+  WETH = '0xc778417e063141139fce010982780140aa0cd5ab'
+  USD = '0x21f3179cadae46509f615428f639e38123a508ac'
+  DAI = '0x947b4082324af403047154f9f26f14538d775194'
+  CRP_FACTORY = '0xA3F9145CB0B50D907930840BB2dcfF4146df8Ab4'
+}
+
+export function hexToDecimal(hexString: string, decimals: i32): BigDecimal {
   let bytes = Bytes.fromHexString(hexString).reverse() as Bytes
   let bi = BigInt.fromUnsignedBytes(bytes)
   let scale = BigInt.fromI32(10).pow(decimals as u8).toBigDecimal()
@@ -130,6 +144,12 @@ export function updatePoolLiquidity(id: string): void {
   let pool = Pool.load(id)
   let tokensList: Array<Bytes> = pool.tokensList
 
+  if (pool.tokensCount.equals(BigInt.fromI32(0))) {
+    pool.liquidity = ZERO_BD
+    pool.save()
+    return
+  }
+
   if (!tokensList || pool.tokensCount.lt(BigInt.fromI32(2)) || !pool.publicSwap) return
 
   // Find pool liquidity
@@ -152,6 +172,14 @@ export function updatePoolLiquidity(id: string): void {
       poolLiquidity = wethTokenPrice.price.times(poolToken.balance).div(poolToken.denormWeight).times(pool.totalWeight)
       hasPrice = true
     }
+  } else if (tokensList.includes(Address.fromString(DAI))) {
+    let daiTokenPrice = TokenPrice.load(DAI)
+    if (daiTokenPrice !== null) {
+      let poolTokenId = id.concat('-').concat(DAI)
+      let poolToken = PoolToken.load(poolTokenId)
+      poolLiquidity = daiTokenPrice.price.times(poolToken.balance).div(poolToken.denormWeight).times(pool.totalWeight)
+      hasPrice = true
+    }
   }
 
   // Create or update token price
@@ -170,8 +198,12 @@ export function updatePoolLiquidity(id: string): void {
       let poolToken = PoolToken.load(poolTokenId)
 
       if (
+        pool.active && !pool.crp && pool.tokensCount.notEqual(BigInt.fromI32(0)) && pool.publicSwap &&
         (tokenPrice.poolTokenId == poolTokenId || poolLiquidity.gt(tokenPrice.poolLiquidity)) &&
-        (tokenPriceId != WETH.toString() || (pool.tokensCount.equals(BigInt.fromI32(2)) && hasUsdPrice))
+        (
+          (tokenPriceId != WETH.toString() && tokenPriceId != DAI.toString()) ||
+          (pool.tokensCount.equals(BigInt.fromI32(2)) && hasUsdPrice)
+        )
       ) {
         tokenPrice.price = ZERO_BD
 
@@ -200,7 +232,7 @@ export function updatePoolLiquidity(id: string): void {
     if (tokenPrice !== null) {
       let poolTokenId = id.concat('-').concat(tokenPriceId)
       let poolToken = PoolToken.load(poolTokenId)
-      if (poolToken.denormWeight.gt(denormWeight)) {
+      if (tokenPrice.price.gt(ZERO_BD) && poolToken.denormWeight.gt(denormWeight)) {
         denormWeight = poolToken.denormWeight
         liquidity = tokenPrice.price.times(poolToken.balance).div(poolToken.denormWeight).times(pool.totalWeight)
       }
@@ -213,6 +245,16 @@ export function updatePoolLiquidity(id: string): void {
 
   pool.liquidity = liquidity
   pool.save()
+}
+
+export function decrPoolCount(active: boolean, finalized: boolean, crp: boolean): void {
+  if (active) {
+    let factory = Balancer.load('1')
+    factory.poolCount = factory.poolCount - 1
+    if (finalized) factory.finalizedPoolCount = factory.finalizedPoolCount - 1
+    if (crp) factory.crpCount = factory.crpCount - 1
+    factory.save()
+  }
 }
 
 export function saveTransaction(event: ethereum.Event, eventName: string): void {
@@ -240,4 +282,54 @@ export function createUserEntity(address: string): void {
     let user = new User(address)
     user.save()
   }
+}
+
+export function isCrp(address: Address): boolean {
+  let crpFactory = CRPFactory.bind(Address.fromString(CRP_FACTORY))
+  let isCrp = crpFactory.try_isCrp(address)
+  if (isCrp.reverted) return false
+  return isCrp.value
+}
+
+export function getCrpUnderlyingPool(crp: ConfigurableRightsPool): string | null {
+  let bPool = crp.try_bPool()
+  if (bPool.reverted) return null;
+  return bPool.value.toHexString()
+}
+
+export function getCrpController(crp: ConfigurableRightsPool): string | null {
+  let controller = crp.try_getController()
+  if (controller.reverted) return null;
+  return controller.value.toHexString()
+}
+
+export function getCrpSymbol(crp: ConfigurableRightsPool): string {
+  let symbol = crp.try_symbol()
+  if (symbol.reverted) return ''
+  return symbol.value
+}
+
+export function getCrpName(crp: ConfigurableRightsPool): string {
+  let name = crp.try_name()
+  if (name.reverted) return ''
+  return name.value
+}
+
+export function getCrpCap(crp: ConfigurableRightsPool): BigInt {
+  let cap = crp.try_getCap()
+  if (cap.reverted) return BigInt.fromI32(0)
+  return cap.value
+}
+
+export function getCrpRights(crp: ConfigurableRightsPool): string[] {
+  let rights = crp.try_rights()
+  if (rights.reverted) return []
+  let rightsArr: string[] = []
+  if (rights.value.value0) rightsArr.push('canPauseSwapping')
+  if (rights.value.value1) rightsArr.push('canChangeSwapFee')
+  if (rights.value.value2) rightsArr.push('canChangeWeights')
+  if (rights.value.value3) rightsArr.push('canAddRemoveTokens')
+  if (rights.value.value4) rightsArr.push('canWhitelistLPs')
+  if (rights.value.value5) rightsArr.push('canChangeCap')
+  return rightsArr
 }

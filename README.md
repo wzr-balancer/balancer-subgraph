@@ -1,4 +1,4 @@
-# WazirX Subgraph
+# Balancer Subgraph
 
 The graphql schema is still under heavy development and will likely have major breaking changes.
 
@@ -45,12 +45,16 @@ To blow away graph-node settings
 docker-compose kill && docker-compose rm -f && rm -rf data
 ```
 
+### Contracts
+
+Deploy balancer contracts using truffle. Using the `yarn deploy` script in balancer-dapp also makes this easy to test out the subgraph using the frontend.
+
 ### Subgraph
 
-Clone the WazirX subgraph
+Clone the balancer subgraph
 
 ```
-git clone git@github.com:WazirX/Wazirx-subgraph.git
+git clone git@github.com:balancer-labs/balancer-subgraph.git
 ```
 
 Update factory address in subgraph.yaml to the one listed as part of the deploy
@@ -122,7 +126,7 @@ docker-compose kill && docker-compose rm -f && rm -rf data
 
 ## Queries
 
-GraphiQL interface can be accessed on a dev env at: http://127.0.0.1:8000/subgraphs/name/wazirx/dex
+GraphiQL interface can be accessed on a dev env at: http://127.0.0.1:8000/subgraphs/name/balancer-labs/balancer-subgraph
 
 **List of pools**
 ```GraphQL

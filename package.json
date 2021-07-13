@@ -1,16 +1,18 @@
 {
-  "name": "wazirx",
+  "name": "balancer",
   "version": "0.1.0",
   "scripts": {
-    "create": "graph create wazir/dex --node https://mumbai-graph.matic.today",
-    "create:local": "graph create wazirx/dex --node http://127.0.0.1:8020",
+    "create": "graph create balancer-labs/balancer-subgraph --node https://api.thegraph.com/deploy/",
+    "deploy:bsctestnet": "graph deploy aaron-foster-wallace/balancer-on-bsc-chapel-a1 subgraph.bsctestnet.yaml --debug --ipfs https://api.thegraph.com/ipfs/ --node https://api.thegraph.com/deploy/",
+    "create:local": "graph create balancer-labs/balancer-subgraph --node http://127.0.0.1:8020",
     "codegen": "graph codegen --output-dir src/types/",
     "build": "graph build",
-    "deploy": "graph deploy --access-token c90876740d3d4648802b67ef6373e8cc --node https://api.thegraph.com/deploy/ --ipfs https://api.thegraph.com/ipfs/ sameepsi/wazirx",
+    "deploy": "graph deploy balancer-labs/balancer --ipfs https://api.thegraph.com/ipfs/ --node https://api.thegraph.com/deploy/",
     "deploy:beta": "graph deploy balancer-labs/balancer-beta --ipfs https://api.thegraph.com/ipfs/ --node https://api.thegraph.com/deploy/",
     "deploy:kovan": "graph deploy balancer-labs/balancer-kovan subgraph.kovan.yaml --debug --ipfs https://api.thegraph.com/ipfs/ --node https://api.thegraph.com/deploy/",
+    "deploy:rinkeby": "graph deploy balancer-labs/balancer-rinkeby subgraph.rinkeby.yaml --debug --ipfs https://api.thegraph.com/ipfs/ --node https://api.thegraph.com/deploy/",
     "deploy:ropsten": "graph deploy balancer-labs/balancer-ropsten subgraph.ropsten.yaml --debug --ipfs https://api.thegraph.com/ipfs/ --node https://api.thegraph.com/deploy/",
-    "deploy:local": "graph deploy wazirx/mumbai-balancer-subgraph subgraph.mumbai.yaml --debug --ipfs https://api.thegraph.com/ipfs/ --node https://mumbai-graph.matic.today"
+    "deploy:local": "graph deploy balancer-labs/balancer-subgraph subgraph.yaml --debug --ipfs http://localhost:5001 --node http://127.0.0.1:8020"
   },
   "devDependencies": {
     "@graphprotocol/graph-cli": "^0.18.0",
@@ -20,7 +22,7 @@
     "babel-polyfill": "^6.26.0",
     "babel-register": "^6.26.0",
     "keytar": "^5.0.0",
-    "truffle": "^5.1.0",
+    "truffle": "^5.3.14",       
     "truffle-contract": "^4.0.5",
     "truffle-hdwallet-provider": "^1.0.4"
   }
