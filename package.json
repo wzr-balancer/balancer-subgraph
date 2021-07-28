@@ -4,6 +4,7 @@
   "scripts": {
     "create": "graph create balancer-labs/balancer-subgraph --node https://api.thegraph.com/deploy/",
     "deploy:bsctestnet": "graph deploy aaron-foster-wallace/balancer-on-bsc-chapel-a1 subgraph.bsctestnet.yaml --debug --ipfs https://api.thegraph.com/ipfs/ --node https://api.thegraph.com/deploy/",
+   "deploy:bsc": "graph deploy aaron-foster-wallace/balancer-on-bsc subgraph.bsc.yaml --debug --ipfs https://api.thegraph.com/ipfs/ --node https://api.thegraph.com/deploy/",	
     "create:local": "graph create balancer-labs/balancer-subgraph --node http://127.0.0.1:8020",
     "codegen": "graph codegen --output-dir src/types/",
     "build": "graph build",
